@@ -17,3 +17,26 @@ jobs:
       - run: python -m pip install -e '.[dev]'
       - run: ruff check . && ruff format --check .
       - run: pytest -q
+  integration:
+    runs-on: ubuntu-latest
+    services:
+      warehouse:
+        image: timescale/timescaledb:latest-pg16
+        env:
+          POSTGRES_USER: crm
+          POSTGRES_PASSWORD: ci-only-password
+          POSTGRES_DB: warehouse
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U crm -d warehouse"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+    env:
+      DATABASE_URL: postgresql://crm:ci-only-password@localhost:5432/warehouse
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+      - run: python -m pip install -e '.[dev]'
+      - run: pytest -m integration -q
