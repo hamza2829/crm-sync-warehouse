@@ -60,4 +60,8 @@ def validate_records(resource: str, records: list[dict]) -> tuple[list, list, di
         except ValidationError as exc:
             reason = "; ".join(f"{'.'.join(map(str, e['loc']))}: {e['msg']}" for e in exc.errors())
             rejected.append({"resource": resource, "raw": raw, "reason": reason})
-    return valid, rejected, {"unknown_fields": sorted(unknown), "rejected": len(rejected)}
+    return (
+        valid,
+        rejected,
+        {"unknown_fields": sorted(unknown), "rejected": len(rejected), "seen": len(records)},
+    )

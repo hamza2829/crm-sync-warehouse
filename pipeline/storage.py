@@ -66,10 +66,22 @@ class Database:
             # Files deliberately contain simple statements without procedural SQL.
             for statement in path.read_text(encoding="utf-8").split(";"):
                 if statement.strip():
+                    if not self.postgres and statement.lstrip().startswith(
+                        "CREATE OR REPLACE VIEW"
+                    ):
+                        statement = statement.replace("CREATE OR REPLACE VIEW", "CREATE VIEW")
+                        name = statement.split()[2]
+                        connection.execute(f"DROP VIEW IF EXISTS {name}")
                     connection.execute(statement)
 
     def initialize(self):
         self.apply_sql(SQL_ROOT / "001_schema.sql")
+        if self.postgres:
+            self.apply_sql(SQL_ROOT / "002_timescale.sql")
+
+    def run_models(self):
+        for path in sorted((SQL_ROOT / "models").glob("*.sql")):
+            self.apply_sql(path)
 
     def cursor(self) -> str | None:
         rows = self.rows("SELECT cursor FROM sync_state WHERE resource = ?", ("deals",))
