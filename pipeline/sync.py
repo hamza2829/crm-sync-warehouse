@@ -3,7 +3,6 @@
 import logging
 from uuid import uuid4
 
-from mock_crm.data import cursor_for
 from pipeline.client import CRMClient
 from pipeline.schemas import validate_records
 from pipeline.storage import Database, json_text, utc_now
@@ -13,12 +12,15 @@ logger = logging.getLogger(__name__)
 
 def extract(db: Database, client: CRMClient, **flags) -> dict:
     start_cursor = db.cursor()
+    started_at = utc_now()
+    deals = client.deals(start_cursor, **flags)
     return {
         "run_id": str(uuid4()),
-        "started_at": utc_now(),
+        "started_at": started_at,
         "start_cursor": start_cursor,
+        "next_cursor": client.last_checkpoint,
         "records": {
-            "deals": client.deals(start_cursor, **flags),
+            "deals": deals,
             "companies": client.get("/companies")["results"],
             "contacts": client.get("/contacts")["results"],
         },
@@ -61,22 +63,20 @@ def load(db: Database, batch: dict) -> str:
                 (
                     batch["run_id"],
                     rejected["resource"],
-                    str(rejected["raw"].get("id", "unknown")),
+                    rejected["record_id"],
                     rejected["reason"],
                     json_text(rejected["raw"]),
                     stamp,
                 ),
             )
-        records = batch["records"]["deals"]
-        if records:
-            cursor = cursor_for(records[-1])
+        if batch["records"]["deals"]:
             db.execute(
                 connection,
                 """
                 INSERT INTO sync_state VALUES (?, ?, ?) ON CONFLICT (resource)
                 DO UPDATE SET cursor=excluded.cursor, updated_at=excluded.updated_at
                 """,
-                ("deals", cursor, stamp),
+                ("deals", batch["next_cursor"], stamp),
             )
         count = db.execute(connection, "SELECT COUNT(*) AS n FROM raw_deals").fetchone()["n"]
         db.execute(

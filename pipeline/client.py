@@ -27,6 +27,7 @@ class CRMClient:
         if attempts < 1:
             raise ValueError("attempts must be positive")
         self.client, self.attempts, self.sleep = client, attempts, sleep
+        self.last_checkpoint = None
 
     def get(self, path: str, **params) -> dict:
         for attempt in range(self.attempts):
@@ -47,12 +48,16 @@ class CRMClient:
     def deals(self, after: str | None = None, **flags) -> list[dict]:
         records = []
         seen = set()
+        self.last_checkpoint = after
         while True:
             params = {"limit": 100, **flags}
             if after:
                 params["after"] = after
             page = self.get("/deals", **params)
             records.extend(page["results"])
+            if page["results"]:
+                # The API envelope carries progress even if record fields drift.
+                self.last_checkpoint = page["checkpoint"]
             following = page.get("paging", {}).get("next", {}).get("after")
             if not following:
                 return records
