@@ -99,3 +99,14 @@ def test_stale_extracted_batch_cannot_regress_checkpoint(db, crm):
     sync(db, crm)
     with pytest.raises(ValueError, match="Checkpoint changed"):
         load(db, old_batch)
+
+
+@pytest.mark.parametrize("field", ["id", "updated_at"])
+def test_missing_cursor_fields_in_payload_do_not_crash_load(db, crm, field):
+    batch = extract(db, crm)
+    # The source envelope provides the checkpoint independently of record fields.
+    batch["records"]["deals"][-1].pop(field)
+    load(db, validate(batch))
+    assert len(db.rows("SELECT * FROM quarantine")) == 1
+    assert len(db.rows("SELECT * FROM raw_deals")) == 499
+    assert extract(db, crm)["records"]["deals"] == []

@@ -51,7 +51,7 @@ SCHEMAS = {"deals": Deal, "companies": Company, "contacts": Contact}
 def validate_records(resource: str, records: list[dict]) -> tuple[list, list, dict]:
     schema = SCHEMAS[resource]
     valid, rejected, unknown = [], [], set()
-    for raw in records:
+    for index, raw in enumerate(records):
         extras = set(raw) - set(schema.model_fields)
         unknown.update(extras)
         try:
@@ -59,7 +59,14 @@ def validate_records(resource: str, records: list[dict]) -> tuple[list, list, di
             valid.append({"parsed": parsed, "raw": raw})
         except ValidationError as exc:
             reason = "; ".join(f"{'.'.join(map(str, e['loc']))}: {e['msg']}" for e in exc.errors())
-            rejected.append({"resource": resource, "raw": raw, "reason": reason})
+            rejected.append(
+                {
+                    "resource": resource,
+                    "raw": raw,
+                    "reason": reason,
+                    "record_id": str(raw.get("id", f"missing-{index}")),
+                }
+            )
     return (
         valid,
         rejected,

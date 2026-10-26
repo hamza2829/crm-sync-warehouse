@@ -51,29 +51,31 @@ def crm_sync():
         return load(Database(), json.loads(Path(path).read_text(encoding="utf-8")))
 
     @task(task_id="run_models")
-    def run_models_task(run_id: str):
+    def run_models_task(sync_run_id: str):
         Database().run_models()
-        return run_id
+        return sync_run_id
 
     @task(task_id="data_quality_checks")
-    def quality_task(run_id: str):
-        run_checks(Database(), run_id)
-        return run_id
+    def quality_task(sync_run_id: str):
+        run_checks(Database(), sync_run_id)
+        return sync_run_id
 
     @task(task_id="forecast")
-    def forecast_task(run_id: str):
+    def forecast_task(sync_run_id: str):
         projection = forecast_from_models(Database())
-        path = Path("artifacts/runs") / run_id / "forecast.json"
+        path = Path("artifacts/runs") / sync_run_id / "forecast.json"
         path.write_text(json_text(projection), encoding="utf-8")
 
     @task(task_id="report", trigger_rule="all_done")
-    def report_task(run_id: str):
-        result = generate_report(Database(), run_id)
+    def report_task(sync_run_id: str):
+        result = generate_report(Database(), sync_run_id)
         # A successful all_done leaf would otherwise mask a failed quality task.
-        checks = Database().rows("SELECT passed FROM quality_results WHERE run_id=?", (run_id,))
+        checks = Database().rows(
+            "SELECT passed FROM quality_results WHERE run_id=?", (sync_run_id,)
+        )
         if len(checks) != 5 or not all(row["passed"] for row in checks):
             raise RuntimeError("Quality failed; failure report saved")
-        if not (Path("artifacts/runs") / run_id / "forecast.json").exists():
+        if not (Path("artifacts/runs") / sync_run_id / "forecast.json").exists():
             raise RuntimeError("Forecast task failed; diagnostic report saved")
         return str(result.resolve())
 

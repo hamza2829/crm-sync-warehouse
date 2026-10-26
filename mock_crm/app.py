@@ -57,6 +57,7 @@ def create_app(data: dict | None = None, clock=time.monotonic) -> FastAPI:
         records = sorted(app.state.data["deals"], key=lambda d: (d["updated_at"], d["id"]))
         records = [d for d in records if (d["updated_at"], d["id"]) > boundary]
         page = [dict(row) for row in records[:limit]]
+        checkpoint = cursor_for(page[-1]) if page else after
         next_cursor = cursor_for(page[-1]) if page and len(records) > limit else None
         enabled = drift if drift is not None else os.getenv("CRM_SCHEMA_DRIFT", "0") == "1"
         if enabled:
@@ -64,7 +65,11 @@ def create_app(data: dict | None = None, clock=time.monotonic) -> FastAPI:
                 row["value"] = row.pop("amount")
                 row.pop("currency")
                 row["campaign_code"] = "synthetic-drift"
-        return {"results": page, "paging": {"next": {"after": next_cursor}} if next_cursor else {}}
+        return {
+            "results": page,
+            "checkpoint": checkpoint,
+            "paging": {"next": {"after": next_cursor}} if next_cursor else {},
+        }
 
     @app.get("/companies")
     def companies():

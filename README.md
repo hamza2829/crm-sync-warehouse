@@ -133,7 +133,9 @@ local PC. The local commands require no Docker.
 | Webhook delivery | Set CRM_WEBHOOK_URL; PATCH /deals/{id}/stage. Unset URL disables delivery. An unavailable receiver simulates failure. | Receiver validates a shared secret and payload, then records the event. Identical event_time/event_id replays deduplicate. Failed synchronous delivery returns 502 without changing the mock stage. There is no durable outbox. |
 
 Deals use `(updated_at, id)` ordering to avoid skipping equal timestamps at page
-boundaries. The source must update updated_at on every mutation; late arrivals
+boundaries. A separate response-envelope checkpoint preserves progress even if
+required fields disappear from individual records. The source must update
+updated_at on every mutation; late arrivals
 behind the cursor are outside this demo's guarantee. `ON CONFLICT (id) DO UPDATE`
 keeps one row per source id. Data, quarantine, run log and cursor commit in one
 transaction. A writer lock and checkpoint comparison reject stale batches.
@@ -243,6 +245,7 @@ quarantine, quality boundaries, query permissions, calendar forecasts and offlin
 reports. Integration tests are marked integration and refuse to run outside
 GitHub Actions. They verify full sync twice, drift, webhooks, the hypertable,
 incremental updates, models, quality and permissions against the real service.
+There are 88 unit tests and six integration tests.
 
 ```text
 mock_crm/     seed, pagination and stage mutation
@@ -256,7 +259,7 @@ docs/         dictionary and generated sample report
 
 The three project PRs cover [CRM and ingestion](https://github.com/hamza2829/crm-sync-warehouse/pull/1),
 [warehouse and quality](https://github.com/hamza2829/crm-sync-warehouse/pull/2),
-and orchestration, forecast, dashboard and CI.
+and [orchestration, forecast, dashboard and CI](https://github.com/hamza2829/crm-sync-warehouse/pull/3).
 
 ## Limits
 

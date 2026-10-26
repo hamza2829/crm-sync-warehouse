@@ -25,7 +25,7 @@ SQLite stores equivalent JSON text. Ids are synthetic positive integers.
 | sync_runs | rows_seen, rows_loaded, quarantined | Counts across all three resources for this batch. rows_loaded counts validated records upserted, not only newly inserted ids. |
 | sync_runs | row_count | Total warehouse deal count after the load, used as the next quality baseline. |
 | sync_runs | drift | JSON per resource: unknown_fields, rejected count, seen count. Also written to the run log and report. |
-| quarantine | run_id, resource, record_id | Composite key tying a rejected source record to its load and resource. Source id is text here to retain malformed identifiers. |
+| quarantine | run_id, resource, record_id | Composite key tying a rejected source record to its load and resource. Source id is text to retain malformed identifiers; a missing id uses a batch row index prefixed with missing-. |
 | quarantine | reason, raw | Validation errors and untouched rejected source JSON. Renames are not guessed. |
 | quarantine | quarantined_at | Warehouse time when rejection was recorded. |
 | deal_events | event_id, event_time | Producer UUID and source stage-change time. Composite primary key also provides replay deduplication; event_time is the Timescale partition key. |
