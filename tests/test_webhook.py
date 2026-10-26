@@ -1,5 +1,6 @@
 from uuid import uuid4
 
+import httpx
 from fastapi.testclient import TestClient
 
 from pipeline.storage import utc_now
@@ -56,3 +57,13 @@ def test_stage_change_delivers_webhook(db, api, monkeypatch):
 def test_same_stage_does_not_emit_event(api):
     before = api.app.state.data["deals"][0]["stage"]
     assert api.patch("/deals/1/stage", json={"stage": before}).json() == {"changed": False}
+
+
+def test_failed_delivery_does_not_change_stage(api, monkeypatch):
+    monkeypatch.setenv("CRM_WEBHOOK_URL", "http://receiver/webhooks/deals")
+    before = api.app.state.data["deals"][0]["stage"]
+    target = "won" if before != "won" else "lost"
+    with httpx.Client(transport=httpx.MockTransport(lambda _: httpx.Response(503))) as receiver:
+        api.app.state.webhook_client = receiver
+        assert api.patch("/deals/1/stage", json={"stage": target}).status_code == 502
+    assert api.app.state.data["deals"][0]["stage"] == before
