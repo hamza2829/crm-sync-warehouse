@@ -32,6 +32,10 @@ jobs:
           --health-interval 5s --health-timeout 5s --health-retries 20
     env:
       DATABASE_URL: postgresql://crm:ci-only-password@localhost:5432/warehouse
+      CRM_URL: http://127.0.0.1:8000
+      AIRFLOW_HOME: ${{ github.workspace }}/airflow-home
+      AIRFLOW__CORE__DAGS_FOLDER: ${{ github.workspace }}/dags
+      AIRFLOW__CORE__LOAD_EXAMPLES: 'False'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -40,3 +44,39 @@ jobs:
           cache: pip
       - run: python -m pip install -e '.[dev]'
       - run: pytest -m integration -q
+      - name: Install Airflow 3 in an isolated environment
+        run: |
+          python -m venv "$RUNNER_TEMP/airflow-venv"
+          "$RUNNER_TEMP/airflow-venv/bin/pip" install 'apache-airflow==3.1.8' \
+            --constraint https://raw.githubusercontent.com/apache/airflow/constraints-3.1.8/constraints-3.11.txt
+          "$RUNNER_TEMP/airflow-venv/bin/pip" install -e . 'apache-airflow==3.1.8' \
+            --constraint https://raw.githubusercontent.com/apache/airflow/constraints-3.1.8/constraints-3.11.txt
+          "$RUNNER_TEMP/airflow-venv/bin/pip" check
+          echo "$RUNNER_TEMP/airflow-venv/bin" >> "$GITHUB_PATH"
+      - name: Start the synthetic CRM
+        run: |
+          uvicorn mock_crm.app:app --host 127.0.0.1 --port 8000 > "$RUNNER_TEMP/mock-crm.log" 2>&1 &
+          for attempt in {1..30}; do
+            if curl --fail --silent "$CRM_URL/health"; then exit 0; fi
+            sleep 1
+          done
+          cat "$RUNNER_TEMP/mock-crm.log"
+          exit 1
+      - name: Run all seven Airflow tasks against TimescaleDB
+        run: |
+          airflow db migrate
+          airflow dags test crm_sync
+      - name: Save dependency evidence
+        if: always()
+        run: |
+          mkdir -p artifacts
+          python -m pip freeze > artifacts/ci-dependencies.txt
+          cp "$RUNNER_TEMP/mock-crm.log" artifacts/mock-crm.log || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: crm-dashboard-and-run-report
+          path: |
+            artifacts/
+            docs/last_run_report.md
+          if-no-files-found: error
